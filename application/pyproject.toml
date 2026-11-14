@@ -1,0 +1,14 @@
+[project]
+name = "pictures-organizer"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncio>=4.0.0",
+    "grandalf>=0.8",
+    "httpx>=0.25.0",
+    "ipython>=9.17.1",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.0.0",
+    "typing>=3.10.0.0",
+]
