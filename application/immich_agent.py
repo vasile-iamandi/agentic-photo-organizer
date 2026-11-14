@@ -1,5 +1,5 @@
-from typing import Dict, List, Any
-from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
+from typing import Dict, List, Any, AsyncGenerator
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage, AIMessageChunk
 from graph import build_graph
 from langgraph.types import Command
 
@@ -13,50 +13,75 @@ class ImmichAgent:
     def _get_config(self):
         return {"configurable": {"thread_id": self.thread_id}}
 
-    # TODO: add run command with graph (this is mw layer: layer between APP and graph)
-    async def run(self, message: str) -> Dict[str, Any]:
-        """
-        Run the graph with a user message.
-        Returns dict with:
-          - response_text
-          - extracted_assets
-          - requires_confirmation: bool
-          - pending_action: dict description
-        """
+    async def _process_stream(self, input_payload: Any, prev_msg_count: int) -> AsyncGenerator[Dict[str, Any], None]:
         config = self._get_config()
 
-        current_state = self.app.get_state(config)
-        current_msg_count = len(current_state.values.get("messages", [])) if current_state and current_state.values else 0
+        async for mode, chunk in self.app.astream(
+            input_payload,
+            config=config,
+            stream_mode=["messages", "updates"],
+            version="v3"
+        ):
+            if mode == "messages":
+                msg_chunk, metadata = chunk
+                if isinstance(msg_chunk, AIMessageChunk) and msg_chunk.content and metadata.get("langgraph_node") == "agent":
+                    yield {"type": "token", "content": msg_chunk.content}
 
-        input_data = {"messages": [HumanMessage(content=message)]}
-        next_state = await self.app.ainvoke(input_data, config=config)
+            elif mode == "updates" and "__interrupt__" in chunk:
+                current_state = self.app.get_state(config)
+                all_messages = current_state.values.get("messages", [])
+                new_messages = all_messages[prev_msg_count:]
 
-        next_state = self.app.get_state(config)
-        next_messages = current_state.values.get("messages", [])
-        new_messages = next_messages[current_msg_count:]
+                confirmation_data = self._build_confirmation_question(current_state, new_messages)
+                yield {
+                    "type": "interrupt",
+                    "data": confirmation_data
+                }
+                return
 
+        # 3. Stream finished normally (without interrupt)
+        final_state = self.app.get_state(config)
+        all_messages = final_state.values.get("messages", [])
+        new_messages = all_messages[prev_msg_count:]
+        assets = self.extract_assets(new_messages)
 
-        if next_state.tasks and next_state.tasks[0].interrupts:
-            current_interrupt = next_state.tasks[0].interrupts[0]
-            interrupt_value = current_interrupt.value
-            if interrupt_value.get("action") == "human_confirmation":
-                # send confirmation question to application layer
-                return self._build_confirmation_question(next_state, new_messages);
-        else:
-            # regular answer (without tools), just execute
-            messages = next_state.get("messages", [])
-            assets = self.extract_assets(new_messages)
+        final_text = ""
+        if all_messages:
+            last_msg = all_messages[-1]
+            final_text = last_msg.content if isinstance(last_msg, (AIMessage, ToolMessage)) else str(last_msg)
 
-            final_text = ""
-            if messages:
-                last_msg = messages[-1]
-                final_text = last_msg.content if isinstance(last_msg, (AIMessage, ToolMessage)) else str(last_msg)
-
-            return {
+        yield {
+            "type": "final",
+            "data": {
                 "response_text": final_text,
                 "extracted_assets": assets,
                 "pending_action": None
+            }
         }
+
+    async def run(self, message: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Start conversation."""
+        config = self._get_config()
+        current_state = self.app.get_state(config)
+        prev_msg_count = len(current_state.values.get("messages", [])) if current_state and current_state.values else 0
+
+        input_data = {"messages": [HumanMessage(content=message)]}
+        async for event in self._process_stream(input_data, prev_msg_count):
+            yield event
+
+    async def resume_confirmation(self, approved: bool) -> AsyncGenerator[Dict[str, Any], None]:
+        """Resume execution after user confirmation"""
+        config = self._get_config()
+        current_state = self.app.get_state(config)
+        prev_msg_count = len(current_state.values.get("messages", [])) if current_state and current_state.values else 0
+
+        payload = {
+            "approved": approved,
+            "note": "User approved operations." if approved else "User rejected operations."
+        }
+
+        async for event in self._process_stream(Command(resume=payload), prev_msg_count):
+            yield event
 
     def _build_confirmation_question(self, state, turn_messages: List[BaseMessage]) -> Dict[str, Any]:
         """Build a requires_confirmation response from a state paused at human_confirmation."""
@@ -105,42 +130,3 @@ class ImmichAgent:
                     except Exception:
                         pass
         return extracted_assets
-
-    async def resume_confirmation(self, approved: bool) -> Dict[str, Any]:
-        """
-        Resume graph execution cleanly via conditional edges based on approval decision.
-        Also handles chained HITL: if after resuming the graph pauses again at
-        human_confirmation (e.g. a second sensitive tool call), returns requires_confirmation=True.
-        """
-        config = self._get_config()
-        current_state = self.app.get_state(config)
-
-        prev_msg_count = len(current_state.values.get("messages", []))
-        decision = "approved" if approved else "rejected"
-
-        payload = {
-            "approved": approved,
-            "note": "User approved operations."
-        }
-        # Resume execution by sending Command(resume=decision_status) to the interrupted node
-        result_state = await self.app.ainvoke(Command(resume=payload), config=config)
-
-        all_messages = result_state.get("messages", [])
-        turn_messages = all_messages[prev_msg_count:]
-        assets = self.extract_assets(turn_messages)
-
-        last_msg = all_messages[-1] if all_messages else None
-        final_text = last_msg.content if isinstance(last_msg, (AIMessage, ToolMessage)) else str(last_msg)
-
-        if approved:
-            return {
-                "response_text": f"✅ **Action was confirmed and successfully done!**\n\n{final_text}",
-                "extracted_assets": assets,
-                "requires_confirmation": False
-            }
-        else:
-            return {
-                "response_text": f"❌ **Action cancelled by user.**\n\n{final_text}",
-                "extracted_assets": [],
-                "requires_confirmation": False
-            }

@@ -76,7 +76,7 @@ def build_graph():
             goto = goto
         )
 
-    def human_confirmation_node(state: MessagesState) -> Dict[str, Any]:
+    def human_confirmation_node(state: MessagesState) -> Command[Literal["agent", "tools"]]:
         """
         Human-in-the-loop decision node using native interrupt().
         - Pauses execution and waits for Command("approved": True / False).
