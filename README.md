@@ -11,7 +11,8 @@ The assistant allows users to search photos in natural language (Other languages
 ### 1. Prerequisites & Immich Setup
 - Python `>= 3.12`
 - [uv](https://docs.astral.sh/uv/) package manager installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Docker & Docker Compose (for running Immich locally)
+- Docker for running Immich locally
+- Azure OpenAI resource (Endpoint, API Key, and Model Deployment) shall be added in .env file.
 
 #### Setting up Immich via Docker Compose:
 The repository provides a complete Docker Compose environment located in the [`immich_setup/`](./immich_setup) directory:
@@ -31,3 +32,19 @@ In `immich_setup/.env`, adjust your storage paths, database credentials, and por
    - Navigate to **Account Settings** -> **API Keys** -> **New API Key**.
    - Copy the generated API key into your `application/.env` as `IMMICH_API_KEY`.
 
+#### 🤖 Setting up Azure OpenAI (e.g. GPT-4.1 Nano / GPT-4o):
+To use the natural language assistant, you need an active Azure OpenAI deployment:
+
+1. **Create an Azure OpenAI Resource:**
+   - Log into the [Azure Portal](https://portal.azure.com/) or [Azure AI Foundry / Studio](https://ai.azure.com/).
+   - Create a new **Azure OpenAI** or **Azure AI Foundry Hub/Project** resource in a supported region (e.g. `East US 2`, `Sweden Central`).
+
+2. **Deploy the Model (e.g. `gpt-4.1-nano` or `gpt-4o`):**
+   - In Azure AI Studio / Azure OpenAI Studio, go to **Deployments** $\rightarrow$ **Deploy model** $\rightarrow$ **Deploy base model**.
+   - Select `gpt-4.1-nano` (or `gpt-4o` / `gpt-4o-mini`).
+   - Assign a **Deployment Name** (e.g., `gpt-4.1-nano`).
+
+3. **Retrieve Endpoint & API Keys:**
+   - Go to your resource's **Keys and Endpoint** section.
+   - Note the **Endpoint** (format: `https://<resource-name>.openai.azure.com` or `https://<resource-name>.services.ai.azure.com` — *do not include trailing paths like `/openai/v1/responses`*).
+   - Copy **Key 1** (or **Key 2**).
