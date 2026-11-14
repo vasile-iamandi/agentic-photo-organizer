@@ -1,10 +1,17 @@
 from langgraph.graph.message import add_messages
-from typing import Dict, List, Any, TypedDict, Annotated, Literal
-from langchain_core.messages import BaseMessage, SystemMessage
+from typing import Dict, List, Any, TypedDict, Annotated, Literal, Optional
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.types import Command
 from ai_model import ai_model
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.types import Command, interrupt
+from langgraph.checkpoint.memory import MemorySaver
+from pydantic import BaseModel
+
+class Decision(BaseModel):
+	approved: bool
+	note: str | None = None
 
 #################################################################################
 # --- System Prompt ---
@@ -28,6 +35,9 @@ Instructions for compound requests (e.g., „fă un album separat și pune acolo
     Respond to the user in a friendly and concise manner in Romanian.
 """
 
+# Sensitive tools that require human confirmation
+SENSITIVE_TOOLS = {"create_immich_album", "add_assets_to_immich_album"}
+
 # Import Immich tools
 from immich_tools import (
     immich_tools,
@@ -47,25 +57,70 @@ def build_graph():
     
     model_ai = ai_model.get()
     
-    def agent_node(state: MessagesState) ->  dict[str, Any]:
+    def agent_node(state: MessagesState) ->  Command[Literal["human_confirmation", "tools"]]:
         messages = state["messages"]
         if not any(isinstance(m, SystemMessage) for m in messages):
             messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
         response = model_ai.invoke(messages)
 
-        return {"messages": [response]}
+        if not isinstance(response, AIMessage) or not response.tool_calls:
+            return Command(
+                update = {"messages": [response]},
+                goto = END
+            )
 
-    # Graph flow
-    state_graph.add_edge(START, "agent")
+        has_sensitive = any(tc["name"] in SENSITIVE_TOOLS for tc in response.tool_calls)
+        goto = "human_confirmation" if has_sensitive else "tools"
+        return Command(
+            update = {"messages": [response]},
+            goto = goto
+        )
 
+    def human_confirmation_node(state: MessagesState) -> Dict[str, Any]:
+        """
+        Human-in-the-loop decision node using native interrupt().
+        - Pauses execution and waits for Command("approved": True / False).
+        - If "approved" is False, it automatically produces the ToolMessages indicating cancellation.
+        - If "approved" is True, it keeps tool calls for the tools node.
+        """
+        last_msg = state["messages"][-1]
+        tool_calls = getattr(last_msg, "tool_calls", [])
+
+        # Suspend node execution until resumed via Command(resume=...)
+        status = interrupt({
+            "tool_calls": tool_calls},
+            response_schema=Decision
+        )
+
+        if status.approved is not True:
+            cancel_messages = [
+                ToolMessage(
+                    content="Action has been refused/cancelled by the user.",
+                    tool_call_id=tc.get("id", "cancelled_call")
+                )
+                for tc in tool_calls
+            ]
+            return Command(
+                update={
+                    "messages": cancel_messages,
+                },
+                goto = "agent")
+
+        return Command(
+            goto = "tools"
+        )
+
+    # Nodes
     tool_node = ToolNode(immich_tools)
     state_graph.add_node("tools", tool_node)
     state_graph.add_node("agent", agent_node)
+    state_graph.add_node("human_confirmation", human_confirmation_node)
 
-    state_graph.add_conditional_edges("agent", tools_condition)
+    # Graph flow
+    state_graph.add_edge(START, "agent")
     state_graph.add_edge("tools", "agent")
 
-    graph = state_graph.compile()
+    graph = state_graph.compile(checkpointer=MemorySaver())
 
     return graph
 
