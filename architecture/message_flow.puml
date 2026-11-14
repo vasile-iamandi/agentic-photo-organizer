@@ -92,12 +92,13 @@ else User Rejects
     Gradio -> Graph : agent.resume(approved=False)
     activate Graph
     
-    Graph -> LLM : ToolMessage("Action cancelled by user")
-    activate LLM
-    LLM --> Graph : AIMessage("I have cancelled the album creation.")
-    deactivate LLM
+    note over Graph
+      Injects ToolMessage(cancelled)
+      and produces direct AIMessage
+      without querying LLM
+    end note
     
-    Graph --> Gradio : Yield Final Response
+    Graph --> Gradio : Yield Final Response ("Am anulat acțiunea...")
     deactivate Graph
     Gradio --> User : Shows cancellation response in chat
     deactivate Gradio

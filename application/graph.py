@@ -76,12 +76,13 @@ def build_graph():
             goto = goto
         )
 
-    def human_confirmation_node(state: MessagesState) -> Command[Literal["agent", "tools"]]:
+    def human_confirmation_node(state: MessagesState) -> Command[Literal["tools", "__end__"]]:
         """
         Human-in-the-loop decision node using native interrupt().
         - Pauses execution and waits for Command("approved": True / False).
-        - If "approved" is False, it automatically produces the ToolMessages indicating cancellation.
-        - If "approved" is True, it keeps tool calls for the tools node.
+        - If "approved" is False, it attaches tool cancellation messages and a predefined
+          AIMessage directly, concluding the turn without an extra LLM call.
+        - If "approved" is True, it forwards execution to the tools node.
         """
         last_msg = state["messages"][-1]
         tool_calls = getattr(last_msg, "tool_calls", [])
@@ -101,14 +102,18 @@ def build_graph():
                 )
                 for tc in tool_calls
             ]
+            response_message = AIMessage(
+                content="Am anulat acțiunea la cererea ta. Nu a fost efectuată nicio modificare pe serverul Immich."
+            )
             return Command(
                 update={
-                    "messages": cancel_messages,
+                    "messages": cancel_messages + [response_message],
                 },
-                goto = "agent")
+                goto=END
+            )
 
         return Command(
-            goto = "tools"
+            goto="tools"
         )
 
     # Nodes

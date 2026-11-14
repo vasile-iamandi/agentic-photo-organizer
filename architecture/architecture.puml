@@ -44,7 +44,7 @@ AgentNode --> HITLNode : Sensitive Tool\n(Create/Add Album)
 AgentNode --> ToolNode : Read-only Tool
 AgentNode --> UI : Final Reply (via App)
 HITLNode --> ToolNode : Approved
-HITLNode --> AgentNode : Rejected
+HITLNode --> UI : Rejected (Predefined response,\nends turn directly)
 ToolNode --> AgentNode : Tool Results
 
 ' External connections
