@@ -51,11 +51,13 @@ async def handle_stream(stream_generator, history: List[dict]):
     found_assets = []
 
     try:
+        accumulated_text = ""
         async for chunk in stream_generator:
             ctype = chunk.get("type")
 
             if ctype == "token":
-                history[-1]["content"] = chunk["content"]
+                accumulated_text += chunk.get("content", "")
+                history[-1]["content"] = accumulated_text
                 yield history, gr.update(visible=False)
 
             elif ctype == "interrupt":
