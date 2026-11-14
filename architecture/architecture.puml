@@ -1,0 +1,61 @@
+@startuml architecture
+!theme plain
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam roundcorner 8
+
+package "Client Layer" {
+    [Web Browser / Gradio Chat UI] as UI
+}
+
+package "Application Layer (Python / FastAPI / Gradio)" {
+    [application.py (Gradio Interface)] as App
+    [ImmichAgent (immich_agent.py)] as AgentWrapper
+    [immich_tools.py (API Client / Tools)] as Tools
+    
+    package "LangGraph Engine (graph.py)" {
+        [Agent Node (LLM Reasoner)] as AgentNode
+        [Human Confirmation (interrupt)] as HITLNode
+        [ToolNode] as ToolNode
+        database "MemorySaver Checkpoint" as Checkpointer
+    }
+}
+
+package "External Services" {
+    cloud "Azure OpenAI Service\n(gpt-4.1-nano / gpt-4o)" as AzureAI
+    
+    package "Immich Stack (Docker)" {
+        [Immich Server (:2283)] as ImmichAPI
+        [Machine Learning (CLIP)] as ImmichML
+        database "PostgreSQL + Vector" as ImmichDB
+        database "Redis Cache" as ImmichRedis
+    }
+}
+
+' Client & Application connections
+UI <--> App : HTTP / WebSocket Stream
+App --> AgentWrapper
+AgentWrapper <--> AgentNode
+AgentNode ..> Checkpointer : saves/loads state
+
+' LangGraph internal flow
+AgentNode --> HITLNode : Sensitive Tool\n(Create/Add Album)
+AgentNode --> ToolNode : Read-only Tool
+AgentNode --> UI : Final Reply (via App)
+HITLNode --> ToolNode : Approved
+HITLNode --> AgentNode : Rejected
+ToolNode --> AgentNode : Tool Results
+
+' External connections
+AgentNode <--> AzureAI : LangChain / ChatCompletions
+ToolNode --> Tools
+Tools <--> ImmichAPI : REST API + x-api-key
+App ..> ImmichAPI : Fetch Thumbnails (preview)
+
+' Immich internal connections
+ImmichAPI --- ImmichML
+ImmichAPI --- ImmichDB
+ImmichAPI --- ImmichRedis
+
+@enduml

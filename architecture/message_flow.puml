@@ -1,0 +1,106 @@
+@startuml message_flow
+!theme plain
+autonumber
+skinparam sequenceMessageAlign center
+skinparam shadowing false
+skinparam responseMessageBelowArrow true
+
+actor "User" as User
+participant "Gradio UI\n(application.py)" as Gradio
+participant "LangGraph\n(graph.py)" as Graph
+participant "Azure OpenAI\n(LLM)" as LLM
+participant "Immich Tools\n(REST Client)" as Tools
+participant "Immich Server\n(:2283)" as Immich
+
+User -> Gradio : Submits message:\n"Create an album with pictures of cats"
+activate Gradio
+
+Gradio -> Graph : agent.run(message, thread_id)
+activate Graph
+
+Graph -> LLM : Invoke(SystemPrompt + UserMessage)
+activate LLM
+note over LLM
+  Translates concepts to English if needed
+  Selects tool: search_immich_assets(query="cat")
+end note
+LLM --> Graph : AIMessage(tool_calls=[search_immich_assets])
+deactivate LLM
+
+Graph -> Tools : search_immich_assets(query="cat")
+activate Tools
+Tools -> Immich : POST /api/search/smart {"query": "cat"}
+activate Immich
+Immich --> Tools : 200 OK (List of asset IDs)
+deactivate Immich
+Tools --> Graph : ToolMessage(results=[ids...])
+deactivate Tools
+
+Graph -> LLM : Invoke(Messages + ToolMessage)
+activate LLM
+note over LLM
+  Selects tool:
+  create_immich_album(name="Cats", asset_ids=[...])
+end note
+LLM --> Graph : AIMessage(tool_calls=[create_immich_album])
+deactivate LLM
+
+note over Graph
+  Detects sensitive tool (SENSITIVE_TOOLS)
+  Triggers interrupt()
+end note
+
+Graph --> Gradio : Yield Interrupt State (Awaiting confirmation)
+deactivate Graph
+
+Gradio -> Immich : GET /api/assets/{id}/thumbnail (preview)
+activate Immich
+Immich --> Gradio : JPEG Image
+deactivate Immich
+
+Gradio --> User : Displays photo preview + [Approve] / [Reject] buttons
+deactivate Gradio
+
+alt User Approves
+    User -> Gradio : Click [Approve / Confirm]
+    activate Gradio
+    Gradio -> Graph : agent.resume(approved=True)
+    activate Graph
+    
+    Graph -> Tools : create_immich_album(...)
+    activate Tools
+    Tools -> Immich : POST /api/albums
+    activate Immich
+    Immich --> Tools : 200 OK (Album created)
+    deactivate Immich
+    Tools --> Graph : ToolMessage(album_id=...)
+    deactivate Tools
+    
+    Graph -> LLM : Invoke(final context)
+    activate LLM
+    LLM --> Graph : AIMessage("Album has been successfully created!")
+    deactivate LLM
+    
+    Graph --> Gradio : Yield Final Response
+    deactivate Graph
+    Gradio --> User : Shows final success response in chat
+    deactivate Gradio
+
+else User Rejects
+    User -> Gradio : Click [Reject / Cancel]
+    activate Gradio
+    Gradio -> Graph : agent.resume(approved=False)
+    activate Graph
+    
+    Graph -> LLM : ToolMessage("Action cancelled by user")
+    activate LLM
+    LLM --> Graph : AIMessage("I have cancelled the album creation.")
+    deactivate LLM
+    
+    Graph --> Gradio : Yield Final Response
+    deactivate Graph
+    Gradio --> User : Shows cancellation response in chat
+    deactivate Gradio
+end
+
+@enduml
