@@ -205,9 +205,11 @@ class ImichAPI:
 immich_client = ImichAPI()
 
 ##################################################################
-# --- Tools ---
+# --- LangChain Tools ---
 ##################################################################
+from langchain_core.tools import tool
 
+@tool
 async def search_immich_assets(
     query: str, 
     page: int = 1, 
@@ -241,7 +243,7 @@ async def search_immich_assets(
     except Exception as e:
         return f"Error searching assets: {str(e)}"
 
-
+@tool
 async def get_immich_asset(asset_id: str) -> str:
     """
     Get details for a specific asset from Imich.
@@ -257,6 +259,8 @@ async def get_immich_asset(asset_id: str) -> str:
         return f"Asset details:\n{asset}"
     except Exception as e:
         return f"Error getting asset: {str(e)}"
+
+@tool
 async def create_immich_album(
     album_name: str,
     description: str = "",
@@ -279,7 +283,7 @@ async def create_immich_album(
     except Exception as e:
         return f"Error creating album: {str(e)}"
 
-
+@tool
 async def get_immich_albums() -> str:
     """
     Get the list of existing albums on the Imich server.
@@ -293,7 +297,7 @@ async def get_immich_albums() -> str:
     except Exception as e:
         return f"Error fetching albums: {str(e)}"
 
-
+@tool
 async def add_assets_to_immich_album(
     album_id: str,
     asset_ids: List[str]
@@ -313,3 +317,14 @@ async def add_assets_to_immich_album(
         return f"Assets added to album successfully:\n{result}"
     except Exception as e:
         return f"Error adding assets to album: {str(e)}"
+
+##################################################################
+# Tools list for LangChain
+##################################################################
+immich_tools = [
+    search_immich_assets,
+    get_immich_asset,
+    create_immich_album,
+    get_immich_albums,
+    add_assets_to_immich_album
+]

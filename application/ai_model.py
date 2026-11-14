@@ -1,5 +1,6 @@
 import os
 from langchain_openai import AzureChatOpenAI
+from immich_tools import immich_tools
 
 class ai_model:
     def get():
@@ -22,4 +23,4 @@ class ai_model:
             api_key=azure_api_key,
             temperature=0.0,
         )
-        return llm
+        return llm.bind_tools(immich_tools)
