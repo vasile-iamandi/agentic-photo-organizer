@@ -1,3 +1,6 @@
+[Screencast from 2026-11-14 23-29-16.webm](https://github.com/user-attachments/assets/3ee95f7d-ea14-4379-932a-9f98f469dce5)
+
+
 # Immich LangChain Assistant with Human-in-the-Loop (HITL)
 
 An intelligent conversational agent and interactive web application powered by **LangChain**, **LangGraph**, and **Azure OpenAI**, integrated with a self-hosted **Immich** photo server.
