@@ -4,33 +4,25 @@ from dotenv import load_dotenv
 load_dotenv()
 import immich_tools
 from graph import build_graph
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langgraph.types import Command
+from immich_agent import ImmichAgent
 
 async def main():
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "thread_name"}}
-    input = [HumanMessage(content="Creeaza un album si pune o poza cu pisici!")]
-    output = await graph.ainvoke({"messages" : input}, config)
+    immich_agent = ImmichAgent()
 
-    if "__interrupt__" in output:
-        from_llm = output["__interrupt__"][0]
-        print(f"Graph interrupted: {from_llm}")
+    user_message = "Creeaza un album si pune o poza cu pisici!"
 
-        resume_command={"approved": True, "note": "Command has been approved."}
-        print(f"Resume interrupt with command {resume_command}")
-        from_llm = await graph.ainvoke(Command(resume=resume_command), config)
+    ai_output = await immich_agent.run(user_message)
+    pending_action = ai_output.get("pending_action") or {}
+    pending_tools = pending_action.get("tool_calls")
 
-        # Print AI and tools messages
-        for message in from_llm.get("messages", []):
-            if isinstance(message, AIMessage) and message.content:
-                print(f"\n🤖 AI: {message.content}")
-            elif isinstance(message, ToolMessage):
-                print(f"\n🛠️ Răspuns de la tool ({message.name}):")
-                print(message.content)
+    if (pending_tools):
+        print(f"There are tools which shall be confirmed: {pending_tools}")
+        await immich_agent.resume_confirmation(approved=True)
+    print(f"response_text: {ai_output.get("response_text")}")
 
-    else:
-        print(f"Normal Execution (without tools): output: {output}")
+def display_confirmation_message(payload):
+    None
 
 if __name__ == "__main__":
     asyncio.run(main())

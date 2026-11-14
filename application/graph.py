@@ -88,6 +88,7 @@ def build_graph():
 
         # Suspend node execution until resumed via Command(resume=...)
         status = interrupt({
+            "action": "human_confirmation",
             "tool_calls": tool_calls},
             response_schema=Decision
         )
