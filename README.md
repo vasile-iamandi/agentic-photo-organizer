@@ -2,7 +2,7 @@
 
 An intelligent conversational agent and interactive web application powered by **LangChain**, **LangGraph**, and **Azure OpenAI**, integrated with a self-hosted **Immich** photo server.
 
-The assistant allows users to search photos in natural language (Romanian/English or other languages), automatically create and manage albums, view interactive galleries directly in the chat, and supervise sensitive operations through Human-in-the-Loop confirmation checkpoints.
+The assistant allows users to search photos in natural language (English or other languages), automatically create and manage albums, view interactive galleries directly in the chat, and supervise sensitive operations through Human-in-the-Loop confirmation checkpoints.
 
 ---
 
@@ -24,7 +24,6 @@ The application coordinates an interactive **Gradio** web chat, a cyclic state g
 
 Detailed diagram sources are also available in [`architecture/`](./architecture):
 - **PlantUML**: [`architecture/architecture.puml`](./architecture/architecture.puml) and [`architecture/message_flow.puml`](./architecture/message_flow.puml)
-- **Mermaid**: [`architecture/architecture.mmd`](./architecture/architecture.mmd) and [`architecture/message_flow.mmd`](./architecture/message_flow.mmd)
 
 ### Key Workflow Components:
 1. **Agent State & Checkpointing**: Powered by `langgraph` and `MemorySaver` to preserve multi-turn conversational context while isolating newly found assets per turn.
