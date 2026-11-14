@@ -23,4 +23,4 @@ class ai_model:
             api_key=azure_api_key,
             temperature=0.0,
         )
-        return llm.bind_tools(immich_tools)
+        return llm.bind_tools(immich_tools, parallel_tool_calling=False)
